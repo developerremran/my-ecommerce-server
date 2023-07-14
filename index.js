@@ -17,7 +17,7 @@ app.use(express.json())
 // jwt midddleware 
 const verifyJWT = (req, res, next) => {
   const authorization = req.headers.authorization;
-  if(!authorization){
+  if (!authorization) {
     return res.status(401).send({ error: true, message: "unauthorized token" });
   }
   const token = authorization.split(' ')[1];
@@ -31,7 +31,7 @@ const verifyJWT = (req, res, next) => {
     req.decoded = decoded;
     next();
   });
-      
+
 }
 
 // main 
@@ -57,6 +57,7 @@ async function run() {
     //    data collection 
     const products = client.db('Products').collection('productsCollection')
     const userData = client.db('userData').collection('userDataCollection')
+    const CartData = client.db('CartData').collection('CartDataCollection')
 
 
     // JWT 
@@ -70,14 +71,29 @@ async function run() {
 
 
 
-    app.post('users',  async (req, res) => {
+    // cart data 
+    app.post('/cartData/:id', async (req, res) => {
+      const body = req.body;
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id)}
+      const alreadyAdded = await CartData.findOne(query);
+      if(alreadyAdded){
+          return res.send('Already added this product')
+      }
+      const result = await CartData.insertOne(body)
+      res.send(result)
+    })
+
+
+    app.post('/newUsers', async (req, res) => {
       const body = req.body;
       const email = req.params.email;
       // console.log(email);
       const query = { email: email };
       const exitUser = await userData.findOne(query)
+
       if (exitUser) {
-        return ('this user already register')
+        return res.status(400).send('This user already exists');
       }
       const newUser = await userData.insertOne(body)
       res.send(newUser)
@@ -85,7 +101,7 @@ async function run() {
 
 
 
-    app.get('/products',verifyJWT,  async (req, res) => {
+    app.get('/products', async (req, res) => {
       const body = req.body;
       let query = {};
       if (req.query?.email) {
@@ -117,40 +133,46 @@ async function run() {
       const deleted = await products.deleteOne(query);
       res.send(deleted);
     });
-   
+
 
 
 
 
     // admin route  users all 
-    const verifyAdmin = async (req, res, next) =>{
+    const verifyAdmin = async (req, res, next) => {
       const email = req.decoded.email
-      const query = {email:email}
+      const query = { email: email }
       const user = await userData.findOne(query)
-      if(user?.role !== 'admin'){
-        return res.status(403).send({error:true, message:'forbidden access'})
+      if (user?.role !== 'admin') {
+        return res.status(403).send({ error: true, message: 'forbidden access' })
       }
       next()
     }
 
-    app.get('/users', verifyJWT, verifyAdmin, async(req, res)=>{
+    app.get('/users', verifyJWT, verifyAdmin, async (req, res) => {
       const body = req.body;
       const result = await userData.find(body).toArray()
       res.send(result)
     })
 
 
-    app.get('/users/admin/:email', verifyJWT, async(req, res)=>{
+    app.get('/users/admin/:email', verifyJWT, async (req, res) => {
       const email = req.params.email
-      if(req.decoded.email !== email){
-        res.send({admin:false})
+      if (req.decoded.email !== email) {
+        res.send({ admin: false })
       }
-      const query = {email:email}
+      const query = { email: email }
       const user = await userData.findOne(query)
-      const result = {admin:user?.role  === 'admin'}
+      const result = { admin: user?.role === 'admin' }
       res.send(result)
     })
 
+    app.delete('/users/delete/:id', async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await userData.deleteOne(query)
+      res.send(result)
+    })
 
     app.patch("/users/admin/:id", async (req, res) => {
       const id = req.params.id;
@@ -163,6 +185,47 @@ async function run() {
       const result = await userData.updateOne(filter, updatedDoc);
       res.send(result);
     });
+
+
+
+// product cart data 
+app.get('/cartData', async (req, res) => {
+  const body = req.body;
+  const email = req.query.email;
+  const query = {email :email}
+  const result = await CartData.find(query).toArray()
+  res.send(result)
+})
+// delete 
+
+app.delete('/cartData/:id', async (req, res) => {
+  const body = req.body;
+  const id = req.params.id;
+  const query = {_id: new ObjectId(id)};
+  const result = await CartData.deleteOne(query)
+  res.send(result)
+})
+
+app.delete('/products/:id', async (req, res) => {
+  const body = req.body;
+  const id = req.params.id;
+  const query = {_id: new ObjectId(id)};
+  const result = await products.deleteOne(query)
+  res.send(result)
+})
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
     // Send a ping to confirm a successful connection
